@@ -3,17 +3,12 @@ package teamcity
 import "testing"
 
 func TestClientGetBuildProperties(t *testing.T) {
-	client := NewTestClient(newResponse(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<properties count="3">
-  <property name="build.counter" value="12"/>
-  <property name="build.number" value="supermama123"/>
-  <property name="env.BUILD_NUMBER" value="supermama123"/>
-</properties>`), nil)
+	client := NewTestClient(newResponse(`{"properties":{"property": [{"name": "build.counter", "value": "12"}]}}`), nil)
 
 	props, err := client.GetBuildProperties("999999")
 
-	if len(props) != 3 {
-		t.Fatal("Expected to have 3 properties, found", len(props))
+	if len(props) != 1 {
+		t.Fatal("Expected to have 1 property, found", len(props))
 	}
 
 	if err != nil {

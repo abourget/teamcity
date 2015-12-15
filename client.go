@@ -91,10 +91,9 @@ func (c *Client) GetBuildProperties(buildID string) (map[string]string, error) {
 	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s/resulting-properties", buildID)
 
 	var response struct {
-		Properties []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"property"`
+		Properties struct {
+			Property []oneProperty `json:"property,omitempty"`
+		} `json:"properties"`
 	}
 	err := c.doRequest("GET", path, nil, &response)
 	if err != nil {
@@ -102,7 +101,7 @@ func (c *Client) GetBuildProperties(buildID string) (map[string]string, error) {
 	}
 
 	m := make(map[string]string)
-	for _, prop := range response.Properties {
+	for _, prop := range response.Properties.Property {
 		m[prop.Name] = prop.Value
 	}
 	return m, nil

@@ -2,7 +2,6 @@ package teamcity
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 )
@@ -30,10 +29,10 @@ type MockTransport struct {
 
 func (b *MockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	b.req = req
-	fmt.Println("MAMAMAA", req)
 	return b.resp, b.err
 }
 
 func newResponse(body string) *http.Response {
-	return &http.Response{Body: ioutil.NopCloser(bytes.NewBuffer([]byte(body)))}
+	resp := &http.Response{Body: ioutil.NopCloser(bytes.NewBuffer([]byte(body)))}
+	return resp
 }
