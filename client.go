@@ -10,6 +10,7 @@ import (
 	"net/http"
 )
 
+// Client to access a TeamCity API
 type Client struct {
 	HTTPClient *http.Client
 	username   string
