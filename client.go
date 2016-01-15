@@ -92,9 +92,7 @@ func (c *Client) GetBuildProperties(buildID string) (map[string]string, error) {
 	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s/resulting-properties", buildID)
 
 	var response struct {
-		Properties struct {
-			Property []oneProperty `json:"property,omitempty"`
-		} `json:"properties"`
+		Property []oneProperty `json:"property,omitempty"`
 	}
 	err := c.doRequest("GET", path, nil, &response)
 	if err != nil {
@@ -102,7 +100,7 @@ func (c *Client) GetBuildProperties(buildID string) (map[string]string, error) {
 	}
 
 	m := make(map[string]string)
-	for _, prop := range response.Properties.Property {
+	for _, prop := range response.Property {
 		m[prop.Name] = prop.Value
 	}
 	return m, nil
@@ -136,9 +134,9 @@ func (c *Client) CancelBuild(buildID int64, comment string) error {
 }
 
 func (c *Client) doRequest(method string, path string, data interface{}, v interface{}) error {
-	authlessUrl := fmt.Sprintf("%s%s", c.host, path)
+	authURL := fmt.Sprintf("https://%s%s", c.host, path)
 
-	fmt.Printf("Sending request to https://%s\n", authlessUrl)
+	fmt.Printf("Sending request to %s\n", authURL)
 
 	var body io.Reader
 	if data != nil {
@@ -150,7 +148,8 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 		body = bytes.NewBuffer(jsonReq)
 	}
 
-	req, _ := http.NewRequest(method, fmt.Sprintf("https://%s:%s@%s", c.username, c.password, authlessUrl), body)
+	req, _ := http.NewRequest(method, authURL, body)
+	req.SetBasicAuth(c.username, c.password)
 	req.Header.Add("Accept", "application/json")
 
 	if body != nil {

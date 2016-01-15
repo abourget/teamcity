@@ -3,7 +3,7 @@ package teamcity
 import "testing"
 
 func TestClientGetBuildProperties(t *testing.T) {
-	client := NewTestClient(newResponse(`{"properties":{"property": [{"name": "build.counter", "value": "12"}]}}`), nil)
+	client := NewTestClient(newResponse(`{"property":[{"name": "build.counter", "value": "12"}], "count": 1}`), nil)
 
 	props, err := client.GetBuildProperties("999999")
 
