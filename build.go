@@ -18,10 +18,14 @@ type Build struct {
 	Triggered struct {
 		Type string
 		Date JSONTime
+		User struct {
+			Username string
+		}
 	}
 	Changes struct {
-		HREF string
+		Change []Change
 	}
+
 	QueuedDate    JSONTime
 	StartDate     JSONTime
 	FinishDate    JSONTime
@@ -40,6 +44,14 @@ type Build struct {
 		Name   string
 		TypeID int64
 		HREF   string
+	}
+
+	ProblemOccurrences struct {
+		ProblemOccurrence []ProblemOccurrence
+	}
+
+	TestOccurrences struct {
+		TestOccurrence []TestOccurrence
 	}
 
 	// As received from the API
