@@ -220,7 +220,31 @@ func (c *Client) CancelBuild(buildID int64, comment string) error {
 	return c.doRequest("POST", fmt.Sprintf("/httpAuth/app/rest/id:%d", buildID), body, nil)
 }
 
+func (c *Client) GetBuildLog(buildID string) (string, error) {
+	cnt, err := c.doNotJSONRequest("GET", fmt.Sprintf("/httpAuth/downloadBuildLog.html?buildId=%s", buildID), nil)
+	buf := bytes.NewBuffer(cnt)
+	return buf.String(), err
+}
+
 func (c *Client) doRequest(method string, path string, data interface{}, v interface{}) error {
+	jsonCnt, err := c.doNotJSONRequest(method, path, data)
+	if err != nil {
+		return err
+	}
+
+	ioutil.WriteFile(fmt.Sprintf("/tmp/mama-%s.json", time.Now().Format("15h04m05.000")), jsonCnt, 0644)
+
+	if v != nil {
+		err = json.Unmarshal(jsonCnt, &v)
+		if err != nil {
+			return fmt.Errorf("json unmarshal: %s (%q)", err, truncate(string(jsonCnt), 1000))
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) doNotJSONRequest(method string, path string, data interface{}) ([]byte, error) {
 	authURL := fmt.Sprintf("https://%s%s", c.host, path)
 
 	fmt.Printf("Sending request to %s\n", authURL)
@@ -229,7 +253,7 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 	if data != nil {
 		jsonReq, err := json.Marshal(data)
 		if err != nil {
-			return fmt.Errorf("marshaling data: %s", err)
+			return nil, fmt.Errorf("marshaling data: %s", err)
 		}
 
 		body = bytes.NewBuffer(jsonReq)
@@ -245,25 +269,11 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	jsonCnt, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	ioutil.WriteFile(fmt.Sprintf("/tmp/mama-%s.json", time.Now().Format("15h04m05.000")), jsonCnt, 0644)
-
-	if v != nil {
-		err = json.Unmarshal(jsonCnt, &v)
-		if err != nil {
-			return fmt.Errorf("json unmarshal: %s (%q)", err, truncate(string(jsonCnt), 1000))
-		}
-	}
-
-	return nil
+	return ioutil.ReadAll(resp.Body)
 }
 
 func truncate(s string, l int) string {
