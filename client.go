@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"time"
 )
 
 // Client to access a TeamCity API
@@ -44,7 +46,11 @@ func (c *Client) QueueBuild(buildTypeID string, branchName string, properties ma
 	}
 
 	build := &Build{}
-	err := c.doRequest("POST", "/httpAuth/app/rest/buildQueue", jsonQuery, &build)
+
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("POST", "/httpAuth/app/rest/buildQueue", jsonQuery, &build)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -55,13 +61,16 @@ func (c *Client) QueueBuild(buildTypeID string, branchName string, properties ma
 }
 
 func (c *Client) SearchBuild(locator string) ([]*Build, error) {
-	path := fmt.Sprintf("/httpAuth/app/rest/builds/?locator=%s&fields=count,build(*,tags(tag),triggered(*),properties(property))", locator)
+	path := fmt.Sprintf("/httpAuth/app/rest/builds/?locator=%s&fields=count,build(*,tags(tag),triggered(*),properties(property),problemOccurrences(*,problemOccurrence(*)),testOccurrences(*,testOccurrence(*)),changes(*,change(*)))", locator)
 
 	respStruct := struct {
 		Count int
 		Build []*Build
 	}{}
-	err := c.doRequest("GET", path, nil, &respStruct)
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &respStruct)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -74,9 +83,14 @@ func (c *Client) SearchBuild(locator string) ([]*Build, error) {
 }
 
 func (c *Client) GetBuild(buildID string) (*Build, error) {
-	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s", buildID)
+	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s?fields=*,tags(tag),triggered(*),properties(property),problemOccurrences(*,problemOccurrence(*)),testOccurrences(*,testOccurrence(*)),changes(*,change(*))", buildID)
 	var build *Build
-	err := c.doRequest("GET", path, nil, &build)
+
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &build)
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +102,43 @@ func (c *Client) GetBuild(buildID string) (*Build, error) {
 	return build, nil
 }
 
+func (c *Client) GetBuildID(buildTypeID, branchName, buildNumber string) (string, error) {
+	type builds struct {
+		Count    int
+		Href     string
+		NextHref string
+		Build    []Build
+	}
+
+	path := fmt.Sprintf("/httpAuth/app/rest/buildTypes/id:%s/builds?locator=branch:%s,number:%s,count:1", buildTypeID, branchName, buildNumber)
+
+	var build *builds
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &build)
+	})
+	if err != nil {
+		return "ID not found", err
+	}
+
+	if build == nil {
+		return "ID not found", errors.New("build not found")
+	}
+
+	return fmt.Sprintf("%d", build.Build[0].ID), nil
+}
+
 func (c *Client) GetBuildProperties(buildID string) (map[string]string, error) {
 	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s/resulting-properties", buildID)
 
 	var response struct {
 		Property []oneProperty `json:"property,omitempty"`
 	}
-	err := c.doRequest("GET", path, nil, &response)
+
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &response)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -111,6 +155,7 @@ func (c *Client) GetChanges(path string) ([]Change, error) {
 		Change []Change
 	}
 
+	path += ",count:99999"
 	err := c.doRequest("GET", path, nil, &changes)
 	if err != nil {
 		return nil, err
@@ -123,6 +168,48 @@ func (c *Client) GetChanges(path string) ([]Change, error) {
 	return changes.Change, nil
 }
 
+func (c *Client) GetProblems(path string, count int64) ([]ProblemOccurrence, error) {
+	var problems struct {
+		Count             int64
+		Default           bool
+		ProblemOccurrence []ProblemOccurrence
+	}
+
+	path += fmt.Sprintf(",count:%v&fields=*,problemOccurrence(*,details)", count)
+	err := c.doRequest("GET", path, nil, &problems)
+	if err != nil {
+		return nil, err
+	}
+
+	if problems.ProblemOccurrence == nil {
+		return nil, errors.New("problemOccurrence list not found")
+	}
+
+	return problems.ProblemOccurrence, nil
+}
+
+func (c *Client) GetTests(path string, count int64, failingOnly bool, ignoreMuted bool) ([]TestOccurrence, error) {
+	var tests struct {
+		Count          int64
+		HREF           string
+		TestOccurrence []TestOccurrence
+	}
+
+	if ignoreMuted {
+		path += ",currentlyMuted:false"
+	}
+	if failingOnly {
+		path += ",status:FAILURE"
+	}
+	path += fmt.Sprintf(",count:%v", count)
+	err := c.doRequest("GET", path, nil, &tests)
+	if err != nil {
+		return nil, err
+	}
+
+	return tests.TestOccurrence, nil
+}
+
 func (c *Client) CancelBuild(buildID int64, comment string) error {
 	body := map[string]interface{}{
 		"buildCancelRequest": map[string]interface{}{
@@ -133,7 +220,31 @@ func (c *Client) CancelBuild(buildID int64, comment string) error {
 	return c.doRequest("POST", fmt.Sprintf("/httpAuth/app/rest/id:%d", buildID), body, nil)
 }
 
+func (c *Client) GetBuildLog(buildID string) (string, error) {
+	cnt, err := c.doNotJSONRequest("GET", fmt.Sprintf("/httpAuth/downloadBuildLog.html?buildId=%s", buildID), nil)
+	buf := bytes.NewBuffer(cnt)
+	return buf.String(), err
+}
+
 func (c *Client) doRequest(method string, path string, data interface{}, v interface{}) error {
+	jsonCnt, err := c.doNotJSONRequest(method, path, data)
+	if err != nil {
+		return err
+	}
+
+	ioutil.WriteFile(fmt.Sprintf("/tmp/mama-%s.json", time.Now().Format("15h04m05.000")), jsonCnt, 0644)
+
+	if v != nil {
+		err = json.Unmarshal(jsonCnt, &v)
+		if err != nil {
+			return fmt.Errorf("json unmarshal: %s (%q)", err, truncate(string(jsonCnt), 1000))
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) doNotJSONRequest(method string, path string, data interface{}) ([]byte, error) {
 	authURL := fmt.Sprintf("https://%s%s", c.host, path)
 
 	fmt.Printf("Sending request to %s\n", authURL)
@@ -142,7 +253,7 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 	if data != nil {
 		jsonReq, err := json.Marshal(data)
 		if err != nil {
-			return fmt.Errorf("marshaling data: %s", err)
+			return nil, fmt.Errorf("marshaling data: %s", err)
 		}
 
 		body = bytes.NewBuffer(jsonReq)
@@ -158,25 +269,11 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	jsonCnt, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	//ioutil.WriteFile(fmt.Sprintf("/tmp/mama-%s.json", time.Now().Format("15:04:05.000")), jsonCnt, 0644)
-
-	if v != nil {
-		err = json.Unmarshal(jsonCnt, &v)
-		if err != nil {
-			return fmt.Errorf("json unmarshal: %s (%q)", err, truncate(string(jsonCnt), 1000))
-		}
-	}
-
-	return nil
+	return ioutil.ReadAll(resp.Body)
 }
 
 func truncate(s string, l int) string {
@@ -184,4 +281,16 @@ func truncate(s string, l int) string {
 		return s[:l]
 	}
 	return s
+}
+
+func withRetry(retries int, f func() error) (err error) {
+	for i := 0; i < retries; i++ {
+		err = f()
+		if err != nil {
+			log.Printf("Retry: %v / %v, error: %v\n", i, retries, err)
+		} else {
+			return
+		}
+	}
+	return
 }
