@@ -34,6 +34,7 @@ type Build struct {
 	StatusText    string
 	State         string
 	BranchName    string
+	Personal      bool
 	Running       bool
 	Pinned        bool
 	DefaultBranch bool
