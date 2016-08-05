@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -245,7 +246,17 @@ func (c *Client) doRequest(method string, path string, data interface{}, v inter
 }
 
 func (c *Client) doNotJSONRequest(method string, path string, data interface{}) ([]byte, error) {
-	authURL := fmt.Sprintf("https://%s%s", c.host, path)
+	//Perform some validation on host. Allow them to specify http vs https
+	//if desired and remove trailing slash if present
+	host := c.host
+	if strings.HasSuffix(host, "/") {
+		host = strings.TrimSuffix(host, "/")
+	}
+	prefix := "https://"
+	if strings.Contains(strings.ToLower(host), "http") {
+		prefix = ""
+	}
+	authURL := fmt.Sprintf("%s%s%s", prefix, host, path)
 
 	fmt.Printf("Sending request to %s\n", authURL)
 
