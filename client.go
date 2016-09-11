@@ -226,6 +226,18 @@ func (c *Client) GetBuildLog(buildID string) (string, error) {
 	return buf.String(), err
 }
 
+func (c *Client) GetArtifact(buildID string) (Artifact, error) {
+	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s/artifacts/children", buildID)
+
+	var artifact Artifact
+	
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &artifact)
+	})
+	return artifact, err
+}
+
 func (c *Client) doRequest(method string, path string, data interface{}, v interface{}) error {
 	jsonCnt, err := c.doNotJSONRequest(method, path, data)
 	if err != nil {
