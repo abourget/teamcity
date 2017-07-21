@@ -226,16 +226,14 @@ func (c *Client) GetBuildLog(buildID string) (string, error) {
 	return buf.String(), err
 }
 
-func (c *Client) GetArtifact(buildID string) (Artifact, error) {
-	path := fmt.Sprintf("/httpAuth/app/rest/builds/id:%s/artifacts/children", buildID)
+func (c *Client) GetArtifacts(build *Build) (ArtifactCollection, error) {
+	var artifacts ArtifactCollection
 
-	var artifact Artifact
-	
 	retries := 8
 	err := withRetry(retries, func() error {
-		return c.doRequest("GET", path, nil, &artifact)
+		return c.doRequest("GET", build.Artifacts.HREF, nil, &artifacts)
 	})
-	return artifact, err
+	return artifacts, err
 }
 
 func (c *Client) doRequest(method string, path string, data interface{}, v interface{}) error {

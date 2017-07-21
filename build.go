@@ -78,12 +78,17 @@ type Build struct {
 	Properties map[string]string `json:"-"`
 }
 
+type ArtifactCollection struct {
+	Count int        `json:"count"`
+	Files []Artifact `json:"file"`
+}
+
 type Artifact struct {
-		Size int  `json:"size"`
-		ModificationTime string  `json:"modificationTime"`
-		Name string  `json:"name"`
-		HREF string  `json:"href"`
-	}
+	Size             int    `json:"size"`
+	ModificationTime string `json:"modificationTime"`
+	Name             string `json:"name"`
+	HREF             string `json:"href"`
+}
 
 type oneProperty struct {
 	Name  string `json:"name"`
