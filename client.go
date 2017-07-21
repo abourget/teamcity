@@ -236,14 +236,14 @@ func (c *Client) GetArtifacts(build *Build) (ArtifactCollection, error) {
 	return artifacts, err
 }
 
-func (c *Client) GetArtifact(artifact *Artifact) (io.Reader, error) {
-	authURL := fmt.Sprintf("https://%s%s", c.host, artifact.HREF)
+func (c *Client) GetArtifact(artifact *ArtifactContent) (io.Reader, error) {
+	authURL := c.addProtocol(artifact.HREF)
 
 	fmt.Printf("Sending request to %s\n", authURL)
 
 	var body io.Reader
 
-	req, _ := http.NewRequest(method, authURL, body)
+	req, _ := http.NewRequest("GET", authURL, body)
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Add("Accept", "application/json")
 
