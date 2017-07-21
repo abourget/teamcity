@@ -60,6 +60,23 @@ func (c *Client) QueueBuild(buildTypeID string, branchName string, properties ma
 	return build, nil
 }
 
+func (c *Client) GetBuildTypes() ([]*BuildType, error) {
+	path := "/httpAuth/app/rest/buildTypes"
+
+	respStruct := struct {
+		Count     int
+		BuildType []*BuildType
+	}{}
+	retries := 8
+	err := withRetry(retries, func() error {
+		return c.doRequest("GET", path, nil, &respStruct)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return respStruct.BuildType, nil
+}
+
 func (c *Client) SearchBuild(locator string) ([]*Build, error) {
 	path := fmt.Sprintf("/httpAuth/app/rest/builds/?locator=%s&fields=count,build(*,tags(tag),triggered(*),properties(property),problemOccurrences(*,problemOccurrence(*)),testOccurrences(*,testOccurrence(*)),changes(*,change(*)))", locator)
 
